@@ -1,0 +1,787 @@
+{
+  "status": "REPRODUCED_PRETRAINED_GOPT_EVALUATION",
+  "evidence_scope": "SpeechOcean762 held-out files only; not PTE and not end-to-end new audio",
+  "source_model_repo": "YuanGongND/gopt@bed909daf8eca035095871e51642525acc5b9b55",
+  "limitations": [
+    "The GOPT training script selects the best checkpoint with test-set phone MSE.",
+    "No clean external validation set and no PTE score labels are available.",
+    "Speechocean762 is non-native Mandarin L1 speech, not representative of all learners.",
+    "Input features come from authors' precomputed Kaldi pipeline, not our own live audio pipeline.",
+    "Utterance scores on SpeechOcean762 use a 0-10 rubric, not the Pearson PTE scale.",
+    "Metrics are on author test data and may be optimistic due to selection on test.",
+    "The installed Kaldi chain model conflicts with the TDNN model prescribed by the GOP recipe; no novel audio was scored."
+  ],
+  "models": [
+    {
+      "model": "GOPT-librispeech",
+      "dataset": "SpeechOcean762, official GOPT precomputed GOP features",
+      "split": "authors' te_* files (checkpoint selection used test metrics; not truly independent model selection)",
+      "test_utterances": 2500,
+      "inference_sec_cpu": 0.323,
+      "inference_ms_per_utterance": 0.129,
+      "uncertainty_method": "percentile bootstrap over utterances; speaker IDs are absent from supplied feature arrays, so intervals are not speaker-clustered",
+      "utterance": {
+        "accuracy": {
+          "pearson_r": 0.7179,
+          "mae_0_to_10": 0.8024,
+          "rmse_0_to_10": 1.0811,
+          "within_1_point_pct": 72.6,
+          "within_2_points_pct": 93.4,
+          "mean_pred": 7.683,
+          "mean_label": 7.696,
+          "spearman_r": 0.6693,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 1.0124,
+            "rmse_0_to_10": 1.5681,
+            "within_1_point_pct": 79.68,
+            "within_2_points_pct": 89.72,
+            "bias_pred_minus_true": 0.3044
+          },
+          "train_median_baseline_mae": 1.0124
+        },
+        "completeness": {
+          "pearson_r": 0.0869,
+          "mae_0_to_10": 0.0948,
+          "rmse_0_to_10": 0.5124,
+          "within_1_point_pct": 99.44,
+          "within_2_points_pct": 99.48,
+          "mean_pred": 10.002,
+          "mean_label": 9.966,
+          "spearman_r": 0.0733,
+          "train_median_baseline": {
+            "score": 10.0,
+            "mae_0_to_10": 0.0339,
+            "rmse_0_to_10": 0.5129,
+            "within_1_point_pct": 99.44,
+            "within_2_points_pct": 99.48,
+            "bias_pred_minus_true": 0.0339
+          },
+          "train_median_baseline_mae": 0.0339
+        },
+        "fluency": {
+          "pearson_r": 0.7562,
+          "mae_0_to_10": 0.7237,
+          "rmse_0_to_10": 0.9363,
+          "within_1_point_pct": 72.88,
+          "within_2_points_pct": 96.4,
+          "mean_pred": 7.779,
+          "mean_label": 7.84,
+          "spearman_r": 0.6961,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 0.998,
+            "rmse_0_to_10": 1.434,
+            "within_1_point_pct": 78.52,
+            "within_2_points_pct": 92.8,
+            "bias_pred_minus_true": 0.1604
+          },
+          "train_median_baseline_mae": 0.998
+        },
+        "prosody": {
+          "pearson_r": 0.7648,
+          "mae_0_to_10": 0.7262,
+          "rmse_0_to_10": 0.9241,
+          "within_1_point_pct": 73.84,
+          "within_2_points_pct": 96.32,
+          "mean_pred": 7.464,
+          "mean_label": 7.502,
+          "spearman_r": 0.7022,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 1.0336,
+            "rmse_0_to_10": 1.5174,
+            "within_1_point_pct": 77.52,
+            "within_2_points_pct": 90.68,
+            "bias_pred_minus_true": 0.4984
+          },
+          "train_median_baseline_mae": 1.0336
+        },
+        "total": {
+          "pearson_r": 0.7438,
+          "mae_0_to_10": 0.7752,
+          "rmse_0_to_10": 1.0417,
+          "within_1_point_pct": 73.08,
+          "within_2_points_pct": 93.32,
+          "mean_pred": 7.245,
+          "mean_label": 7.263,
+          "spearman_r": 0.6873,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 1.1096,
+            "rmse_0_to_10": 1.7156,
+            "within_1_point_pct": 77.84,
+            "within_2_points_pct": 86.8,
+            "bias_pred_minus_true": 0.7368
+          },
+          "train_median_baseline_mae": 1.1096,
+          "utterance_bootstrap_95pct_ci": {
+            "pearson_r": [
+              0.7191,
+              0.7664
+            ],
+            "spearman_r": [
+              0.6648,
+              0.7103
+            ],
+            "mae": [
+              0.7473,
+              0.8045
+            ],
+            "rmse": [
+              1.0016,
+              1.0809
+            ],
+            "within_1_pct": [
+              71.28,
+              74.92
+            ],
+            "within_2_pct": [
+              92.359,
+              94.32
+            ],
+            "bias": [
+              -0.0599,
+              0.0256
+            ]
+          },
+          "label_distribution": {
+            "0": 7,
+            "1": 3,
+            "2": 2,
+            "3": 75,
+            "4": 100,
+            "5": 143,
+            "6": 218,
+            "7": 579,
+            "8": 913,
+            "9": 454,
+            "10": 6
+          },
+          "out_of_range_prediction_pct": 0.0,
+          "by_true_score_band": {
+            "low_0_to_5": {
+              "n": 330,
+              "mae": 1.328,
+              "within_1_pct": 48.79,
+              "within_2_pct": 74.55,
+              "bias_pred_minus_true": 1.068,
+              "train_median_baseline_mae": 3.918,
+              "train_median_baseline_within_1_pct": 0.0,
+              "utterance_bootstrap_95pct_ci": {
+                "mae": [
+                  1.2208,
+                  1.4464
+                ],
+                "within_1_pct": [
+                  43.3333,
+                  53.9394
+                ],
+                "within_2_pct": [
+                  70.0,
+                  79.0909
+                ],
+                "bias": [
+                  0.9316,
+                  1.2105
+                ]
+              }
+            },
+            "mid_6_to_7": {
+              "n": 797,
+              "mae": 0.878,
+              "within_1_pct": 61.86,
+              "within_2_pct": 94.35,
+              "bias_pred_minus_true": 0.29,
+              "train_median_baseline_mae": 1.274,
+              "train_median_baseline_within_1_pct": 72.65,
+              "utterance_bootstrap_95pct_ci": {
+                "mae": [
+                  0.8377,
+                  0.9193
+                ],
+                "within_1_pct": [
+                  58.4661,
+                  65.2447
+                ],
+                "within_2_pct": [
+                  92.7227,
+                  95.8595
+                ],
+                "bias": [
+                  0.2188,
+                  0.3555
+                ]
+              }
+            },
+            "high_8_to_10": {
+              "n": 1373,
+              "mae": 0.583,
+              "within_1_pct": 85.43,
+              "within_2_pct": 97.23,
+              "bias_pred_minus_true": -0.457,
+              "train_median_baseline_mae": 0.339,
+              "train_median_baseline_within_1_pct": 99.56,
+              "utterance_bootstrap_95pct_ci": {
+                "mae": [
+                  0.5553,
+                  0.613
+                ],
+                "within_1_pct": [
+                  83.394,
+                  87.1814
+                ],
+                "within_2_pct": [
+                  96.2855,
+                  98.0335
+                ],
+                "bias": [
+                  -0.4934,
+                  -0.4232
+                ]
+              }
+            }
+          }
+        }
+      },
+      "phone": {
+        "n": 47369,
+        "pearson_r": 0.6183,
+        "spearman_r": 0.4379,
+        "mae_0_to_2": 0.1415
+      },
+      "word": {
+        "n": 15967,
+        "accuracy": {
+          "pearson_r": 0.5377,
+          "spearman_r": 0.3653,
+          "mae_0_to_10": 0.8021
+        },
+        "stress": {
+          "pearson_r": 0.3245,
+          "spearman_r": 0.1046,
+          "mae_0_to_10": 0.1193
+        },
+        "total": {
+          "pearson_r": 0.5545,
+          "spearman_r": 0.3799,
+          "mae_0_to_10": 0.7088
+        }
+      }
+    },
+    {
+      "model": "GOPT-paiia",
+      "dataset": "SpeechOcean762, official GOPT precomputed GOP features",
+      "split": "authors' te_* files (checkpoint selection used test metrics; not truly independent model selection)",
+      "test_utterances": 2491,
+      "inference_sec_cpu": 0.148,
+      "inference_ms_per_utterance": 0.059,
+      "uncertainty_method": "percentile bootstrap over utterances; speaker IDs are absent from supplied feature arrays, so intervals are not speaker-clustered",
+      "utterance": {
+        "accuracy": {
+          "pearson_r": 0.7249,
+          "mae_0_to_10": 0.7829,
+          "rmse_0_to_10": 1.045,
+          "within_1_point_pct": 73.26,
+          "within_2_points_pct": 94.02,
+          "mean_pred": 7.664,
+          "mean_label": 7.712,
+          "spearman_r": 0.6162,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 0.9984,
+            "rmse_0_to_10": 1.5423,
+            "within_1_point_pct": 79.97,
+            "within_2_points_pct": 90.04,
+            "bias_pred_minus_true": 0.2878
+          },
+          "train_median_baseline_mae": 0.9984
+        },
+        "completeness": {
+          "pearson_r": -0.038,
+          "mae_0_to_10": 0.0669,
+          "rmse_0_to_10": 0.248,
+          "within_1_point_pct": 99.8,
+          "within_2_points_pct": 99.8,
+          "mean_pred": 10.013,
+          "mean_label": 9.991,
+          "spearman_r": -0.0168,
+          "train_median_baseline": {
+            "score": 10.0,
+            "mae_0_to_10": 0.009,
+            "rmse_0_to_10": 0.233,
+            "within_1_point_pct": 99.8,
+            "within_2_points_pct": 99.84,
+            "bias_pred_minus_true": 0.009
+          },
+          "train_median_baseline_mae": 0.009
+        },
+        "fluency": {
+          "pearson_r": 0.6753,
+          "mae_0_to_10": 0.8041,
+          "rmse_0_to_10": 1.0089,
+          "within_1_point_pct": 68.49,
+          "within_2_points_pct": 95.91,
+          "mean_pred": 7.772,
+          "mean_label": 7.865,
+          "spearman_r": 0.5579,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 0.9759,
+            "rmse_0_to_10": 1.3679,
+            "within_1_point_pct": 78.8,
+            "within_2_points_pct": 93.14,
+            "bias_pred_minus_true": 0.1353
+          },
+          "train_median_baseline_mae": 0.9759
+        },
+        "prosody": {
+          "pearson_r": 0.6787,
+          "mae_0_to_10": 0.8009,
+          "rmse_0_to_10": 1.0169,
+          "within_1_point_pct": 66.84,
+          "within_2_points_pct": 95.3,
+          "mean_pred": 7.443,
+          "mean_label": 7.526,
+          "spearman_r": 0.571,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 1.0112,
+            "rmse_0_to_10": 1.4541,
+            "within_1_point_pct": 77.8,
+            "within_2_points_pct": 91.01,
+            "bias_pred_minus_true": 0.4741
+          },
+          "train_median_baseline_mae": 1.0112
+        },
+        "total": {
+          "pearson_r": 0.7305,
+          "mae_0_to_10": 0.7809,
+          "rmse_0_to_10": 1.0235,
+          "within_1_point_pct": 69.65,
+          "within_2_points_pct": 94.74,
+          "mean_pred": 7.245,
+          "mean_label": 7.287,
+          "spearman_r": 0.6166,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 1.0867,
+            "rmse_0_to_10": 1.6584,
+            "within_1_point_pct": 78.12,
+            "within_2_points_pct": 87.11,
+            "bias_pred_minus_true": 0.7126
+          },
+          "train_median_baseline_mae": 1.0867,
+          "utterance_bootstrap_95pct_ci": {
+            "pearson_r": [
+              0.7056,
+              0.7523
+            ],
+            "spearman_r": [
+              0.5868,
+              0.6432
+            ],
+            "mae": [
+              0.7565,
+              0.8094
+            ],
+            "rmse": [
+              0.9919,
+              1.0609
+            ],
+            "within_1_pct": [
+              67.7228,
+              71.4171
+            ],
+            "within_2_pct": [
+              93.7776,
+              95.5851
+            ],
+            "bias": [
+              -0.0803,
+              0.0009
+            ]
+          },
+          "label_distribution": {
+            "0": 1,
+            "1": 1,
+            "2": 2,
+            "3": 74,
+            "4": 100,
+            "5": 143,
+            "6": 218,
+            "7": 579,
+            "8": 913,
+            "9": 454,
+            "10": 6
+          },
+          "out_of_range_prediction_pct": 0.0,
+          "by_true_score_band": {
+            "low_0_to_5": {
+              "n": 321,
+              "mae": 1.322,
+              "within_1_pct": 49.53,
+              "within_2_pct": 74.14,
+              "bias_pred_minus_true": 1.082,
+              "train_median_baseline_mae": 3.819,
+              "train_median_baseline_within_1_pct": 0.0,
+              "utterance_bootstrap_95pct_ci": {
+                "mae": [
+                  1.2155,
+                  1.4337
+                ],
+                "within_1_pct": [
+                  43.9252,
+                  55.1402
+                ],
+                "within_2_pct": [
+                  69.4704,
+                  78.5047
+                ],
+                "bias": [
+                  0.9542,
+                  1.2216
+                ]
+              }
+            },
+            "mid_6_to_7": {
+              "n": 797,
+              "mae": 0.832,
+              "within_1_pct": 71.02,
+              "within_2_pct": 97.62,
+              "bias_pred_minus_true": 0.477,
+              "train_median_baseline_mae": 1.274,
+              "train_median_baseline_within_1_pct": 72.65,
+              "utterance_bootstrap_95pct_ci": {
+                "mae": [
+                  0.7982,
+                  0.8687
+                ],
+                "within_1_pct": [
+                  68.005,
+                  74.1531
+                ],
+                "within_2_pct": [
+                  96.4868,
+                  98.6198
+                ],
+                "bias": [
+                  0.4189,
+                  0.5351
+                ]
+              }
+            },
+            "high_8_to_10": {
+              "n": 1373,
+              "mae": 0.625,
+              "within_1_pct": 73.56,
+              "within_2_pct": 97.89,
+              "bias_pred_minus_true": -0.606,
+              "train_median_baseline_mae": 0.339,
+              "train_median_baseline_within_1_pct": 99.56,
+              "utterance_bootstrap_95pct_ci": {
+                "mae": [
+                  0.5965,
+                  0.6554
+                ],
+                "within_1_pct": [
+                  71.3019,
+                  75.8194
+                ],
+                "within_2_pct": [
+                  97.0867,
+                  98.6162
+                ],
+                "bias": [
+                  -0.6384,
+                  -0.5778
+                ]
+              }
+            }
+          }
+        }
+      },
+      "phone": {
+        "n": 47207,
+        "pearson_r": 0.6843,
+        "spearman_r": 0.4596,
+        "mae_0_to_2": 0.1252
+      },
+      "word": {
+        "n": 15921,
+        "accuracy": {
+          "pearson_r": 0.5862,
+          "spearman_r": 0.3772,
+          "mae_0_to_10": 0.7243
+        },
+        "stress": {
+          "pearson_r": 0.1288,
+          "spearman_r": 0.0626,
+          "mae_0_to_10": 0.1187
+        },
+        "total": {
+          "pearson_r": 0.5986,
+          "spearman_r": 0.3878,
+          "mae_0_to_10": 0.6728
+        }
+      }
+    },
+    {
+      "model": "GOPT-paiib",
+      "dataset": "SpeechOcean762, official GOPT precomputed GOP features",
+      "split": "authors' te_* files (checkpoint selection used test metrics; not truly independent model selection)",
+      "test_utterances": 2491,
+      "inference_sec_cpu": 0.15,
+      "inference_ms_per_utterance": 0.06,
+      "uncertainty_method": "percentile bootstrap over utterances; speaker IDs are absent from supplied feature arrays, so intervals are not speaker-clustered",
+      "utterance": {
+        "accuracy": {
+          "pearson_r": 0.7248,
+          "mae_0_to_10": 0.779,
+          "rmse_0_to_10": 1.0519,
+          "within_1_point_pct": 73.3,
+          "within_2_points_pct": 93.66,
+          "mean_pred": 7.762,
+          "mean_label": 7.712,
+          "spearman_r": 0.6543,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 0.9988,
+            "rmse_0_to_10": 1.5434,
+            "within_1_point_pct": 79.97,
+            "within_2_points_pct": 90.04,
+            "bias_pred_minus_true": 0.2882
+          },
+          "train_median_baseline_mae": 0.9988
+        },
+        "completeness": {
+          "pearson_r": -0.0254,
+          "mae_0_to_10": 0.0921,
+          "rmse_0_to_10": 0.3244,
+          "within_1_point_pct": 99.72,
+          "within_2_points_pct": 99.76,
+          "mean_pred": 10.043,
+          "mean_label": 9.987,
+          "spearman_r": -0.0218,
+          "train_median_baseline": {
+            "score": 10.0,
+            "mae_0_to_10": 0.0127,
+            "rmse_0_to_10": 0.3042,
+            "within_1_point_pct": 99.76,
+            "within_2_points_pct": 99.8,
+            "bias_pred_minus_true": 0.0127
+          },
+          "train_median_baseline_mae": 0.0127
+        },
+        "fluency": {
+          "pearson_r": 0.7009,
+          "mae_0_to_10": 0.7595,
+          "rmse_0_to_10": 0.9829,
+          "within_1_point_pct": 71.58,
+          "within_2_points_pct": 95.87,
+          "mean_pred": 7.968,
+          "mean_label": 7.864,
+          "spearman_r": 0.6465,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 0.9771,
+            "rmse_0_to_10": 1.3736,
+            "within_1_point_pct": 78.8,
+            "within_2_points_pct": 93.14,
+            "bias_pred_minus_true": 0.1365
+          },
+          "train_median_baseline_mae": 0.9771
+        },
+        "prosody": {
+          "pearson_r": 0.6979,
+          "mae_0_to_10": 0.7784,
+          "rmse_0_to_10": 0.9885,
+          "within_1_point_pct": 70.73,
+          "within_2_points_pct": 95.1,
+          "mean_pred": 7.502,
+          "mean_label": 7.525,
+          "spearman_r": 0.6495,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 1.0124,
+            "rmse_0_to_10": 1.4595,
+            "within_1_point_pct": 77.8,
+            "within_2_points_pct": 91.01,
+            "bias_pred_minus_true": 0.4753
+          },
+          "train_median_baseline_mae": 1.0124
+        },
+        "total": {
+          "pearson_r": 0.7391,
+          "mae_0_to_10": 0.7654,
+          "rmse_0_to_10": 1.0145,
+          "within_1_point_pct": 73.3,
+          "within_2_points_pct": 94.58,
+          "mean_pred": 7.304,
+          "mean_label": 7.286,
+          "spearman_r": 0.6757,
+          "train_median_baseline": {
+            "score": 8.0,
+            "mae_0_to_10": 1.0879,
+            "rmse_0_to_10": 1.6631,
+            "within_1_point_pct": 78.12,
+            "within_2_points_pct": 87.11,
+            "bias_pred_minus_true": 0.7138
+          },
+          "train_median_baseline_mae": 1.0879,
+          "utterance_bootstrap_95pct_ci": {
+            "pearson_r": [
+              0.7155,
+              0.7608
+            ],
+            "spearman_r": [
+              0.6505,
+              0.6989
+            ],
+            "mae": [
+              0.7398,
+              0.7935
+            ],
+            "rmse": [
+              0.9771,
+              1.0541
+            ],
+            "within_1_pct": [
+              71.6168,
+              74.9518
+            ],
+            "within_2_pct": [
+              93.617,
+              95.3834
+            ],
+            "bias": [
+              -0.0241,
+              0.0593
+            ]
+          },
+          "label_distribution": {
+            "0": 2,
+            "1": 1,
+            "2": 2,
+            "3": 73,
+            "4": 100,
+            "5": 143,
+            "6": 218,
+            "7": 579,
+            "8": 913,
+            "9": 454,
+            "10": 6
+          },
+          "out_of_range_prediction_pct": 0.0,
+          "by_true_score_band": {
+            "low_0_to_5": {
+              "n": 321,
+              "mae": 1.361,
+              "within_1_pct": 42.06,
+              "within_2_pct": 75.08,
+              "bias_pred_minus_true": 1.099,
+              "train_median_baseline_mae": 3.829,
+              "train_median_baseline_within_1_pct": 0.0,
+              "utterance_bootstrap_95pct_ci": {
+                "mae": [
+                  1.2551,
+                  1.4693
+                ],
+                "within_1_pct": [
+                  36.7601,
+                  47.3598
+                ],
+                "within_2_pct": [
+                  70.405,
+                  79.4393
+                ],
+                "bias": [
+                  0.9626,
+                  1.2416
+                ]
+              }
+            },
+            "mid_6_to_7": {
+              "n": 797,
+              "mae": 0.847,
+              "within_1_pct": 66.88,
+              "within_2_pct": 96.86,
+              "bias_pred_minus_true": 0.401,
+              "train_median_baseline_mae": 1.274,
+              "train_median_baseline_within_1_pct": 72.65,
+              "utterance_bootstrap_95pct_ci": {
+                "mae": [
+                  0.8081,
+                  0.8853
+                ],
+                "within_1_pct": [
+                  63.4881,
+                  70.0125
+                ],
+                "within_2_pct": [
+                  95.6085,
+                  98.1179
+                ],
+                "bias": [
+                  0.3399,
+                  0.4663
+                ]
+              }
+            },
+            "high_8_to_10": {
+              "n": 1373,
+              "mae": 0.579,
+              "within_1_pct": 84.34,
+              "within_2_pct": 97.82,
+              "bias_pred_minus_true": -0.458,
+              "train_median_baseline_mae": 0.339,
+              "train_median_baseline_within_1_pct": 99.56,
+              "utterance_bootstrap_95pct_ci": {
+                "mae": [
+                  0.5523,
+                  0.607
+                ],
+                "within_1_pct": [
+                  82.3015,
+                  86.0889
+                ],
+                "within_2_pct": [
+                  97.0138,
+                  98.5433
+                ],
+                "bias": [
+                  -0.4949,
+                  -0.4259
+                ]
+              }
+            }
+          }
+        }
+      },
+      "phone": {
+        "n": 47185,
+        "pearson_r": 0.6711,
+        "spearman_r": 0.4396,
+        "mae_0_to_2": 0.1251
+      },
+      "word": {
+        "n": 15914,
+        "accuracy": {
+          "pearson_r": 0.596,
+          "spearman_r": 0.3772,
+          "mae_0_to_10": 0.7025
+        },
+        "stress": {
+          "pearson_r": 0.1706,
+          "spearman_r": 0.0618,
+          "mae_0_to_10": 0.128
+        },
+        "total": {
+          "pearson_r": 0.6067,
+          "spearman_r": 0.3854,
+          "mae_0_to_10": 0.6311
+        }
+      }
+    }
+  ]
+}

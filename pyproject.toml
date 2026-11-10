@@ -1,0 +1,13 @@
+[project]
+name = "pte-scoring-lab"
+version = "0.1.0"
+description = "Local, uncalibrated PTE-style speech-scoring experiment"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "faster-whisper>=1.2,<2",
+    "jiwer>=4,<5",
+    "av>=15,<18",  # faster-whisper 1.2.1 uses av.open(metadata_errors=...)
+]
+
+[tool.uv]
+package = false
