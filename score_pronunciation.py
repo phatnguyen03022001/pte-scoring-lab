@@ -925,6 +925,23 @@ def load_and_run_gopt(
     }
 
 
+def local_kaldi_git_commit() -> str:
+    """Do not mistake the parent scoring repository for the extracted Kaldi source."""
+    if not (KALDI_ROOT / ".git").exists():
+        return "unknown"
+    try:
+        result = run_bounded(
+            ["git", "-C", str(KALDI_ROOT), "rev-parse", "--show-toplevel", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        lines = result.stdout.splitlines()
+        if len(lines) == 2 and Path(lines[0]).resolve() == KALDI_ROOT.resolve():
+            return lines[1]
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return "unknown"
+
+
 def kaldi_paths() -> dict[str, Path]:
     return {
         "mfcc_config": GOP_RECIPE / "conf" / "mfcc_hires.conf",
@@ -1445,10 +1462,7 @@ def score(
             warnings.append(
                 "Whole-word regions containing a forced phone below the acoustic support floor were withheld; neighboring supported whole-word regions were scored independently and remain uncalibrated."
             )
-        try:
-            kaldi_commit = run_bounded(["git", "-C", str(KALDI_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5).stdout.strip() or "unknown"
-        except (OSError, subprocess.TimeoutExpired):
-            kaldi_commit = "unknown"
+        kaldi_commit = local_kaldi_git_commit()
         try:
             ffmpeg_version = run_bounded(["ffmpeg", "-version"], capture_output=True, text=True, timeout=5).stdout.splitlines()[0]
         except (OSError, subprocess.TimeoutExpired, IndexError):

@@ -23,6 +23,14 @@ GOPT_PYTHON = ROOT / ".local" / "gopt-venv" / "bin" / "python"
 
 
 class ReferenceAndPhoneTests(unittest.TestCase):
+    def test_kaldi_provenance_does_not_inherit_parent_git_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "kaldi"
+            source.mkdir()
+            with patch.object(scoring, "KALDI_ROOT", source), patch.object(scoring, "run_bounded") as run:
+                self.assertEqual(scoring.local_kaldi_git_commit(), "unknown")
+                run.assert_not_called()
+
     def test_transcript_normalization(self):
         self.assertEqual(scoring.normalize_reference("  Maple, grows QUIETLY-near the stream! "),
                          ["MAPLE", "GROWS", "QUIETLY", "NEAR", "THE", "STREAM"])
