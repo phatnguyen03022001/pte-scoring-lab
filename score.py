@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import jiwer
+from process_safety import run_bounded
 
 NORMALIZE = jiwer.Compose(
     [
@@ -46,10 +47,10 @@ def compare_words(reference: str, transcript: str) -> dict:
 
 
 def audio_duration(audio: Path) -> float:
-    process = subprocess.run(
+    process = run_bounded(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
          "-of", "default=noprint_wrappers=1:nokey=1", str(audio)],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, check=True, timeout=30,
     )
     duration = float(process.stdout.strip())
     if not math.isfinite(duration) or duration <= 0:
@@ -81,12 +82,12 @@ def parse_silence_log(log: str, duration: float) -> tuple[int, float]:
 
 
 def acoustic_pauses(audio: Path, duration: float) -> dict:
-    process = subprocess.run(
+    process = run_bounded(
         ["ffmpeg", "-nostdin", "-hide_banner", "-nostats",
          "-i", str(audio),
          "-af", "silencedetect=noise=-35dB:d=0.25",
          "-f", "null", "-"],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, check=True, timeout=min(300, max(30, int(duration * 4))),
     )
     count, total = parse_silence_log(process.stderr, duration)
     return {

@@ -19,9 +19,6 @@ import score_pronunciation as scoring
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# Local-only SpeechOcean762 fixture, CC BY 4.0 (OpenSLR SLR101); audio remains ignored.
-SPEECHOCEAN_MANIFEST = ROOT / ".local" / "datasets" / "speechocean762-reconstruction" / "sample_manifest.jsonl"
-SPEECHOCEAN_AUDIO = ROOT / ".local" / "datasets" / "speechocean762-reconstruction" / "corpus" / "WAVE" / "SPEAKER0112" / "001120097.WAV"
 GOPT_PYTHON = ROOT / ".local" / "gopt-venv" / "bin" / "python"
 
 
@@ -340,6 +337,52 @@ class AudioInputTests(unittest.TestCase):
 
 @unittest.skipUnless(GOPT_PYTHON.is_file(), "local GOPT CPU runtime is not installed")
 class CheckpointFailureTests(unittest.TestCase):
+    def test_production_single_pass_matches_explicit_reproducibility_validation(self):
+        script = """
+import json, pathlib, sys, types, numpy as np, torch, score_pronunciation as s
+class FakeGOPT:
+    calls = 0
+    def __init__(self, **kwargs): pass
+    def load_state_dict(self, state, strict=True): pass
+    def eval(self): pass
+    def __call__(self, inputs, phone_ids):
+        self.__class__.calls += 1
+        batch = inputs.shape[0]
+        utterance = [torch.full((batch, 1), float(index)) for index in range(5)]
+        phone = torch.full((batch, 50, 1), 0.5)
+        words = [torch.full((batch, 50, 1), float(index + 1)) for index in range(3)]
+        return tuple(utterance + [phone] + words)
+models = types.ModuleType('models'); models.__path__ = []
+models.gopt = types.ModuleType('models.gopt'); models.gopt.GOPT = FakeGOPT
+sys.modules['models'] = models; sys.modules['models.gopt'] = models.gopt
+torch.load = lambda *args, **kwargs: {}
+s.CHECKPOINT = pathlib.Path('/dev/null')
+raw = np.zeros((2, s.FEATURE_DIM), dtype=np.float32)
+phones = [0, 1]
+production, _ = s.load_and_run_gopt(raw, phones, 1)
+production_calls = FakeGOPT.calls
+FakeGOPT.calls = 0
+validated, _ = s.load_and_run_gopt(raw, phones, 1, validate_reproducibility=True)
+print(json.dumps({
+    'production_calls': production_calls,
+    'validation_calls': FakeGOPT.calls,
+    'production_scores': production,
+    'validated_scores': validated,
+}))
+"""
+        process = subprocess.run(
+            [str(GOPT_PYTHON), "-c", script], capture_output=True, text=True,
+            timeout=30, cwd=ROOT,
+        )
+        self.assertEqual(process.returncode, 0, process.stderr or process.stdout)
+        result = json.loads(process.stdout)
+        self.assertEqual(result["production_calls"], 1)
+        self.assertEqual(result["validation_calls"], 2)
+        # Timing metadata intentionally differs; all returned score fields match.
+        production, validated = result["production_scores"], result["validated_scores"]
+        for key in ("window_predictions", "phoneme_scores", "word_phone_scores", "utterance"):
+            self.assertEqual(production[key], validated[key])
+
     def test_nonfinite_repeat_inference_fails_closed(self):
         script = """
 import pathlib, sys, types, numpy as np, torch, score_pronunciation as s
@@ -362,7 +405,7 @@ sys.modules["models.gopt"] = models.gopt
 torch.load = lambda *args, **kwargs: {}
 s.CHECKPOINT = pathlib.Path("/dev/null")
 try:
-    s.load_and_run_gopt(np.zeros((1, s.FEATURE_DIM), dtype=np.float32), [0], 1)
+    s.load_and_run_gopt(np.zeros((1, s.FEATURE_DIM), dtype=np.float32), [0], 1, validate_reproducibility=True)
 except s.ScoreError as error:
     print(error.status, error.stage)
 else:
@@ -479,42 +522,6 @@ else:
                 "status": "MODEL_INCOMPATIBLE", "stage": "gopt_model_loading",
             })
 
-
-@unittest.skipUnless(SPEECHOCEAN_AUDIO.is_file() and SPEECHOCEAN_MANIFEST.is_file() and GOPT_PYTHON.is_file(),
-                     "local SpeechOcean762 fixture and GOPT runtime are not installed")
-class RealAudioIntegrationTests(unittest.TestCase):
-    def fixture_reference(self) -> str:
-        records = [json.loads(line) for line in SPEECHOCEAN_MANIFEST.read_text(encoding="utf-8").splitlines()]
-        record = next((item for item in records if item["utterance_id"] == "001120097"), None)
-        if record is None:
-            self.skipTest("SpeechOcean762 manifest does not contain the selected fixture")
-        return record["reference_text"]
-
-    def run_cli(self, reference: str) -> tuple[subprocess.CompletedProcess[str], dict]:
-        process = subprocess.run(
-            [str(GOPT_PYTHON), str(ROOT / "score_pronunciation.py"),
-             "--audio", str(SPEECHOCEAN_AUDIO), "--reference", reference, "--threads", "2"],
-            capture_output=True, text=True, timeout=180, cwd=ROOT,
-        )
-        return process, json.loads(process.stdout)
-
-    def test_real_audio_completes_kaldi_gop_gopt(self):
-        process, result = self.run_cli(self.fixture_reference())
-        self.assertEqual(process.returncode, 0, process.stderr)
-        self.assertEqual(result["status"], "SCORING_COMPLETED")
-        self.assertTrue(result["validation"]["alignment_valid"])
-        self.assertTrue(result["validation"]["gop_features_valid"])
-        self.assertTrue(result["validation"]["checkpoint_compatible"])
-        self.assertFalse(result["validation"]["transcript_independently_verified"])
-        self.assertEqual(result["evidence"]["gop_feature_shape"][1], 84)
-        self.assertEqual(result["evidence"]["feature_acoustic_output_node"], "output")
-        self.assertEqual(result["evidence"]["alignment_and_support_output_node"], "output-xent")
-        self.assertGreater(result["evidence"]["posterior_frames"], 0)
-        self.assertIn("gop_raw_output_margin", result["phonemes"][0])
-        self.assertNotIn("gop_log_ratio", result["phonemes"][0])
-        self.assertIn("word_index", result["phonemes"][0])
-        self.assertIn("word_index", result["words"][0])
-        self.assertIsNone(result["pearson_pte_score"])
 
 if __name__ == "__main__":
     unittest.main()

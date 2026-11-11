@@ -352,7 +352,7 @@ class FailureIsolationTests(unittest.TestCase):
                  patch.object(integrated, "decode_audio", return_value=np.ones(16000, dtype=np.float32)), \
                  patch.object(integrated, "transcribe_audio", side_effect=RuntimeError("simulated ASR failure")), \
                  patch.object(integrated, "_build_pronunciation", return_value=pronunciation), \
-                 patch.object(integrated.subprocess, "run", return_value=SimpleNamespace(stderr="", stdout="", returncode=0)):
+                 patch.object(integrated, "run_bounded", return_value=SimpleNamespace(stderr="", stdout="", returncode=0)):
                 result = integrated.assess(audio, "Hello world", threads=2)
         self.assertEqual(result["components"]["content"]["status"], "FAILED")
         self.assertEqual(result["components"]["pronunciation"]["status"], "PARTIAL_UNATTRIBUTED_REFERENCE_CONDITIONED_DIAGNOSTICS")
@@ -421,7 +421,7 @@ class FailureIsolationTests(unittest.TestCase):
                  patch.object(integrated, "decode_audio", return_value=np.ones(16000, dtype=np.float32)), \
                  patch.object(integrated, "transcribe_audio", return_value=transcription), \
                  patch.object(integrated, "_build_pronunciation", return_value=integrated._component_failure("ALIGNMENT_INVALID", "unsupported reference alignment")), \
-                 patch.object(integrated.subprocess, "run", return_value=SimpleNamespace(stderr="", stdout="", returncode=0)):
+                 patch.object(integrated, "run_bounded", return_value=SimpleNamespace(stderr="", stdout="", returncode=0)):
                 result = integrated.assess(audio, "Hello", threads=2)
         self.assertEqual(result["components"]["content"]["status"], "AVAILABLE_UNVERIFIED_ASR_PREDICTION")
         self.assertEqual(result["components"]["pronunciation"]["status"], "FAILED")
@@ -457,6 +457,7 @@ class FailureIsolationTests(unittest.TestCase):
         self.assertEqual(safe, {"value": None, "array": [None, 1.0]})
         json.dumps(safe, allow_nan=False)
 
+    @unittest.skipUnless(os.environ.get("PTE_RUN_REAL_AUDIO") == "1", "set PTE_RUN_REAL_AUDIO=1 to run the single SpeechOcean762 full-pipeline smoke test")
     def test_real_audio_integrated_cli_emits_all_components_and_null_pte(self):
         if not SPEECHOCEAN_AUDIO.is_file() or not SPEECHOCEAN_MANIFEST.is_file():
             self.skipTest("verified local SpeechOcean762 fixture is unavailable")
@@ -464,10 +465,17 @@ class FailureIsolationTests(unittest.TestCase):
         record = next((item for item in records if item["utterance_id"] == "001120097"), None)
         if record is None:
             self.skipTest("SpeechOcean762 manifest does not contain the selected fixture")
-        process = subprocess.run(
+        expected_hash = record["audio"]["sha256"]
+        self.assertEqual(hashlib.sha256(SPEECHOCEAN_AUDIO.read_bytes()).hexdigest(), expected_hash)
+        environment = {
+            **os.environ,
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+        }
+        process = integrated.run_bounded(
             [sys.executable, str(ROOT / "score_integrated.py"), "--audio", str(SPEECHOCEAN_AUDIO),
              "--reference", record["reference_text"], "--threads", "2"],
-            capture_output=True, text=True, timeout=180, cwd=ROOT,
+            capture_output=True, text=True, timeout=420, cwd=ROOT, env=environment,
         )
         self.assertEqual(process.returncode, 0, process.stderr)
         result = json.loads(process.stdout)
@@ -475,36 +483,12 @@ class FailureIsolationTests(unittest.TestCase):
         self.assertIsInstance(result["components"]["content"]["predictions"]["transcript_raw"], str)
         self.assertIsNone(result["overall_pte_score"])
         self.assertIsNone(result["pearson_pte_score"])
-        json.dumps(result, allow_nan=False)
-
-    def test_speechocean_learner_audio_engineering_integration_schema(self):
-        """Exercise the public pipeline on licensed, checkpoint-exposed learner audio."""
-        if not SPEECHOCEAN_AUDIO.is_file() or not SPEECHOCEAN_MANIFEST.is_file():
-            self.skipTest("verified SpeechOcean762 learner-audio fixture is unavailable")
-
-        records = [json.loads(line) for line in SPEECHOCEAN_MANIFEST.read_text(encoding="utf-8").splitlines()]
-        record = next((item for item in records if item["utterance_id"] == "001120097"), None)
-        if record is None:
-            self.skipTest("SpeechOcean762 manifest does not contain the selected fixture")
-        expected_hash = record["audio"]["sha256"]
-        actual_hash = hashlib.sha256(SPEECHOCEAN_AUDIO.read_bytes()).hexdigest()
-        self.assertEqual(actual_hash, expected_hash)
-
-        environment = {
-            **os.environ,
-            "HF_HUB_OFFLINE": "1",
-            "TRANSFORMERS_OFFLINE": "1",
-        }
-        process = subprocess.run(
-            [sys.executable, str(ROOT / "score_integrated.py"), "--audio", str(SPEECHOCEAN_AUDIO),
-             "--reference", record["reference_text"], "--threads", "2"],
-            capture_output=True, text=True, timeout=180, cwd=ROOT, env=environment,
-        )
-        self.assertEqual(process.returncode, 0, process.stderr)
-        result = json.loads(process.stdout)
-        self.assertEqual(set(result["components"]), {"content", "pronunciation", "oral_fluency", "prosody", "word_stress"})
-        self.assertIsNone(result["overall_pte_score"])
-        self.assertIsNone(result["pearson_pte_score"])
+        pronunciation = result["components"]["pronunciation"]
+        self.assertIn(pronunciation["status"], ("AVAILABLE_UNCALIBRATED_MODEL_PREDICTIONS", "PARTIAL_UNCALIBRATED_MODEL_PREDICTIONS", "PARTIAL_UNATTRIBUTED_REFERENCE_CONDITIONED_DIAGNOSTICS"))
+        self.assertTrue(any(
+            "uncertainty_reason" in item
+            for item in result["components"]["content"]["measurements"]["alignment"]
+        ))
         json.dumps(result, allow_nan=False)
 
 

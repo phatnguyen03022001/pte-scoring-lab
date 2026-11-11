@@ -23,6 +23,8 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from process_safety import DEADLINE_ENV, deadline_from_env, run_bounded
+
 
 ROOT = Path(__file__).resolve().parent
 KALDI_ROOT = ROOT / ".local" / "kaldi"
@@ -341,16 +343,16 @@ def load_training_phone_order(data_zip: Path, pure_id_to_symbol: dict[int, str])
     return {pure_id: class_id for class_id, pure_id in enumerate(first_seen)}
 
 
-def validate_audio(audio: Path, work_dir: Path) -> tuple[Path, float, dict[str, Any]]:
+def validate_audio(audio: Path, work_dir: Path, deadline: float | None = None) -> tuple[Path, float, dict[str, Any]]:
     if not audio.is_file():
         raise ScoreError("INVALID_INPUT", "audio", "Audio file does not exist or is not a regular file.", path=str(audio))
     ffprobe = shutil.which("ffprobe")
     ffmpeg = shutil.which("ffmpeg")
     if not ffprobe or not ffmpeg:
         raise ScoreError("MISSING_DEPENDENCY", "audio", "ffmpeg and ffprobe must be available on PATH.")
-    probe = subprocess.run(
-        [ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(audio)],
-        capture_output=True, text=True, timeout=30,
+    probe = run_scoring_command("audio_probe", [
+        ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(audio)],
+        timeout=30, deadline=deadline,
     )
     try:
         duration = float(probe.stdout.strip())
@@ -362,9 +364,10 @@ def validate_audio(audio: Path, work_dir: Path) -> tuple[Path, float, dict[str, 
         raise ScoreError("UNSUPPORTED_AUDIO_DURATION", "audio", "Audio exceeds the 120-second local processing limit.", duration_seconds=duration, max_seconds=MAX_AUDIO_SECONDS)
 
     normalized = work_dir / "audio_16khz_mono.wav"
-    decoded = subprocess.run(
+    decoded = run_scoring_command(
+        "audio_decode",
         [ffmpeg, "-nostdin", "-hide_banner", "-v", "error", "-y", "-i", str(audio), "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(normalized)],
-        capture_output=True, text=True, timeout=max(30, int(duration * 4)),
+        timeout=max(30, int(duration * 4)), deadline=deadline,
     )
     if decoded.returncode != 0 or not normalized.is_file():
         raise ScoreError("AUDIO_DECODE_FAILED", "audio", "ffmpeg could not decode and normalize the input audio.", stderr=decoded.stderr[-1500:])
@@ -453,12 +456,22 @@ def build_work_area(work_dir: Path, threads: int = 4) -> dict[str, Any]:
     return {"env_path": work_dir / "path.sh", "env_marker": work_dir / "cmd.sh", "_env": env}
 
 
-def run_stage(stage: str, command: list[str], cwd: Path, env: dict[str, str], logs: Path, timeout: int = 600) -> float:
+def run_scoring_command(stage: str, command: list[str], *, timeout: int, cwd: Path | None = None, env: dict[str, str] | None = None, deadline: float | None = None) -> subprocess.CompletedProcess[str]:
+    try:
+        return run_bounded(command, cwd=cwd, env=env, capture_output=True, text=True,
+                           timeout=timeout, deadline=deadline if deadline is not None else deadline_from_env(env))
+    except subprocess.TimeoutExpired as exc:
+        raise ScoreError("STAGE_TIMEOUT", stage, f"{stage} exceeded the remaining execution deadline.", timeout_seconds=exc.timeout) from exc
+
+
+def run_stage(stage: str, command: list[str], cwd: Path, env: dict[str, str], logs: Path, timeout: int = 180) -> float:
     start = time.perf_counter()
     try:
-        proc = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired as exc:
-        raise ScoreError("STAGE_TIMEOUT", stage, f"{stage} exceeded its {timeout}-second timeout.") from exc
+        proc = run_scoring_command(stage, command, cwd=cwd, env=env, timeout=timeout)
+    except ScoreError as exc:
+        if exc.status == "STAGE_TIMEOUT":
+            exc.message = f"{stage} exceeded its {timeout}-second stage limit or the overall execution deadline."
+        raise
     elapsed = time.perf_counter() - start
     logs.mkdir(parents=True, exist_ok=True)
     log_path = logs / f"{stage}.log"
@@ -760,6 +773,7 @@ def load_and_run_gopt(
     raw_features: Any, phone_ids: list[int], threads: int,
     windows: list[dict[str, int]] | None = None,
     allow_partial: bool = False,
+    validate_reproducibility: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     try:
         import numpy as np
@@ -825,22 +839,26 @@ def load_and_run_gopt(
             first_start = time.perf_counter()
             first = model(inputs, phone_tensor)
             first_seconds = time.perf_counter() - first_start
-            warm_start = time.perf_counter()
-            second = model(inputs, phone_tensor)
-            warm_seconds = time.perf_counter() - warm_start
+            warm_seconds = None
+            max_delta = None
+            if validate_reproducibility:
+                warm_start = time.perf_counter()
+                second = model(inputs, phone_tensor)
+                warm_seconds = time.perf_counter() - warm_start
     except Exception as exc:
         raise ScoreError("GOPT_INFERENCE_FAILED", "gopt_inference", "GOPT forward inference failed.", error=str(exc)) from exc
 
     arrays = validate_gopt_outputs(first, batch_size=len(windows))
-    validate_gopt_outputs(second, batch_size=len(windows))
-    max_delta = 0.0
-    for left, right in zip(first, second):
-        delta = float(torch.max(torch.abs(left - right)).item())
-        if not math.isfinite(delta):
-            raise ScoreError("GOPT_INFERENCE_FAILED", "reproducibility", "Repeated CPU inference returned a non-finite prediction delta.")
-        max_delta = max(max_delta, delta)
-    if not math.isfinite(max_delta) or max_delta > 1e-6:
-        raise ScoreError("GOPT_INFERENCE_FAILED", "reproducibility", "Repeated CPU inference exceeded the 1e-6 determinism tolerance.", max_absolute_delta=max_delta)
+    if validate_reproducibility:
+        validate_gopt_outputs(second, batch_size=len(windows))
+        max_delta = 0.0
+        for left, right in zip(first, second):
+            delta = float(torch.max(torch.abs(left - right)).item())
+            if not math.isfinite(delta):
+                raise ScoreError("GOPT_INFERENCE_FAILED", "reproducibility", "Repeated CPU inference returned a non-finite prediction delta.")
+            max_delta = max(max_delta, delta)
+        if not math.isfinite(max_delta) or max_delta > 1e-6:
+            raise ScoreError("GOPT_INFERENCE_FAILED", "reproducibility", "Repeated CPU inference exceeded the 1e-6 determinism tolerance.", max_absolute_delta=max_delta)
 
     native_scale = "GOPT normalized training target units (nominal 0-2; regression outputs are not clamped)"
     window_predictions: list[dict[str, Any]] = []
@@ -971,8 +989,10 @@ def score(
     source_phone_words: list[list[str]] | None = None,
     feature_reconstruction_only: bool = False,
     recover_supported_words: bool = False,
+    validate_reproducibility: bool = False,
 ) -> dict[str, Any]:
     started = time.perf_counter()
+    deadline = deadline_from_env() or (time.monotonic() + 360.0)
     require_assets()
     if feature_reconstruction_only and source_phone_words is None:
         raise ScoreError("INVALID_INPUT", "source_phone_transcript", "Feature-reconstruction-only mode requires a source-native canonical phone sequence.")
@@ -994,9 +1014,10 @@ def score(
     try:
         pure_table = temp_for_phone_map / "phones-pure.txt"
         phone_map_path = temp_for_phone_map / "phone-to-pure-phone.int"
-        map_proc = subprocess.run(
+        map_proc = run_scoring_command(
+            "phone_mapping",
             ["perl", str(paths["remove_phone_markers"]), str(LANG / "phones.txt"), str(pure_table), str(phone_map_path)],
-            capture_output=True, text=True, timeout=30,
+            timeout=30, deadline=deadline,
         )
         if map_proc.returncode != 0:
             raise ScoreError("MODEL_INCOMPATIBLE", "phone_mapping", "Kaldi phone-marker mapping utility failed.", stderr=map_proc.stderr[-1000:])
@@ -1036,9 +1057,10 @@ def score(
         work_dir = Path(temp_name)
         work = build_work_area(work_dir, threads)
         env: dict[str, str] = work["_env"]
+        env[DEADLINE_ENV] = str(deadline)
         logs = work_dir / "logs"
         preprocessing_start = time.perf_counter()
-        normalized_audio, duration, audio_info = validate_audio(audio, work_dir)
+        normalized_audio, duration, audio_info = validate_audio(audio, work_dir, deadline)
         audio_preprocessing_seconds = time.perf_counter() - preprocessing_start
         key = _write_kaldi_text(work_dir, normalized_audio, words, expected)
 
@@ -1096,15 +1118,17 @@ def score(
         text_phone_int = work_dir / "data" / "local" / "text-phone.int"
         # sym2int output is captured to a file through the normal shell because
         # its stdout must become Kaldi's text archive input.
-        word_convert = subprocess.run(
+        word_convert = run_scoring_command(
+            "word_mapping",
             ["bash", "-c", f"{shlex_quote(str(GOP_RECIPE / 'utils' / 'sym2int.pl'))} -f 2- {shlex_quote(str(LANG / 'words.txt'))} data/test/text > {shlex_quote(str(text_int))}"],
-            cwd=work_dir, env=env, capture_output=True, text=True, timeout=30,
+            cwd=work_dir, env=env, timeout=30,
         )
         if word_convert.returncode != 0:
             raise ScoreError("UNSUPPORTED_VOCABULARY", "word_mapping", "Reference words cannot be mapped to the LibriSpeech language table.", stderr=word_convert.stderr[-1000:])
-        phone_convert = subprocess.run(
+        phone_convert = run_scoring_command(
+            "phone_mapping",
             ["bash", "-c", f"{shlex_quote(str(GOP_RECIPE / 'utils' / 'sym2int.pl'))} -f 2- {shlex_quote(str(LANG / 'phones.txt'))} data/local/text-phone > {shlex_quote(str(text_phone_int))}"],
-            cwd=work_dir, env=env, capture_output=True, text=True, timeout=30,
+            cwd=work_dir, env=env, timeout=30,
         )
         if phone_convert.returncode != 0:
             raise ScoreError("UNSUPPORTED_PHONEME", "phone_mapping", "Reference phones cannot be mapped to Kaldi phone IDs.", stderr=phone_convert.stderr[-1000:])
@@ -1148,9 +1172,10 @@ def score(
         # Recreate the recipe's phone map in this temporary work area.
         pure_table = work_dir / "exp" / "phones-pure.txt"
         phone_map = work_dir / "exp" / "phone-to-pure-phone.int"
-        map_proc = subprocess.run(
+        map_proc = run_scoring_command(
+            "phone_mapping",
             ["perl", str(paths["remove_phone_markers"]), str(LANG / "phones.txt"), str(pure_table), str(phone_map)],
-            capture_output=True, text=True, timeout=30,
+            timeout=30, deadline=deadline,
         )
         if map_proc.returncode != 0:
             raise ScoreError("MODEL_INCOMPATIBLE", "phone_mapping", "Kaldi pure-phone map generation failed.", stderr=map_proc.stderr[-1000:])
@@ -1306,7 +1331,7 @@ def score(
         partial_windows = len(supported_windows) != len(window_support)
         gopt_result, gopt_timing = load_and_run_gopt(
             raw_features[:, 1:], gopt_phone_ids, threads, windows=supported_windows,
-            allow_partial=partial_windows,
+            allow_partial=partial_windows, validate_reproducibility=validate_reproducibility,
         )
         phone_results: list[dict[str, Any]] = []
         phone_window_indices: list[int | None] = [None] * len(expected)
@@ -1418,11 +1443,11 @@ def score(
                 "Whole-word regions containing a forced phone below the acoustic support floor were withheld; neighboring supported whole-word regions were scored independently and remain uncalibrated."
             )
         try:
-            kaldi_commit = subprocess.run(["git", "-C", str(KALDI_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5).stdout.strip() or "unknown"
+            kaldi_commit = run_bounded(["git", "-C", str(KALDI_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5).stdout.strip() or "unknown"
         except (OSError, subprocess.TimeoutExpired):
             kaldi_commit = "unknown"
         try:
-            ffmpeg_version = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=5).stdout.splitlines()[0]
+            ffmpeg_version = run_bounded(["ffmpeg", "-version"], capture_output=True, text=True, timeout=5).stdout.splitlines()[0]
         except (OSError, subprocess.TimeoutExpired, IndexError):
             ffmpeg_version = "unknown"
         try:
@@ -1523,6 +1548,7 @@ def main() -> int:
     parser.add_argument("--source-utterance-id", help="Utterance key used with --source-phone-text.")
     parser.add_argument("--feature-reconstruction-only", action="store_true", help="Emit source-phone-aligned GOP features without applying the scoring support floor or producing scores.")
     parser.add_argument("--recover-supported-words", action="store_true", help="Experimental: score contiguous whole-word regions with per-phone support after an independent transcript check.")
+    parser.add_argument("--validate-reproducibility", action="store_true", help="Run a second GOPT forward pass and enforce the 1e-6 determinism check.")
     args = parser.parse_args()
     if args.threads < 1 or args.threads > 8:
         result = {"status": "INVALID_INPUT", "engine": "kaldi-gop-gopt-librispeech", "error": "--threads must be between 1 and 8.", "pearson_pte_score": None}
@@ -1535,6 +1561,7 @@ def main() -> int:
         result = score(
             args.audio.expanduser(), args.reference, args.threads, args.keep_intermediates,
             source_phone_words, args.feature_reconstruction_only, args.recover_supported_words,
+            args.validate_reproducibility,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
         return 0

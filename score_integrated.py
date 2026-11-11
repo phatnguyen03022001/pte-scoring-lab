@@ -6,10 +6,12 @@ import argparse
 import importlib.metadata
 import json
 import math
+import os
 import re
 import sys
 import subprocess
 import shutil
+import tempfile
 import time
 import unicodedata
 from collections import Counter
@@ -19,6 +21,7 @@ from typing import Any
 import numpy as np
 
 import score_pronunciation
+from process_safety import DEADLINE_ENV, PROCESS_GROUP_REGISTRY_ENV, run_bounded
 from faster_whisper import WhisperModel
 from faster_whisper.audio import decode_audio
 from faster_whisper.vad import VadOptions, get_speech_timestamps
@@ -505,7 +508,7 @@ def _probe_audio_duration(audio: Path) -> float:
     ffprobe = shutil.which("ffprobe")
     if ffprobe is None:
         raise RuntimeError("ffprobe is required for bounded audio processing.")
-    process = subprocess.run(
+    process = run_bounded(
         [ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries", "format=duration",
          "-of", "default=noprint_wrappers=1:nokey=1", str(audio)],
         capture_output=True, text=True, timeout=30,
@@ -729,13 +732,18 @@ def _build_pronunciation(
         ]
         if recover_supported_words:
             command.append("--recover-supported-words")
-        process = subprocess.run(
-            command,
-            capture_output=True, text=True, timeout=900,
-        )
+        with tempfile.TemporaryDirectory(prefix="pte-process-groups-") as registry_dir:
+            execution_env = os.environ.copy()
+            execution_env[DEADLINE_ENV] = str(time.monotonic() + 300.0)
+            execution_env[PROCESS_GROUP_REGISTRY_ENV] = str(Path(registry_dir) / "groups.txt")
+            process = run_bounded(
+                command,
+                capture_output=True, text=True, timeout=300, env=execution_env,
+                cleanup_process_groups=True,
+            )
         result = json.loads(process.stdout)
     except subprocess.TimeoutExpired as exc:
-        return _component_failure("STAGE_TIMEOUT", "Local Kaldi/GOPT pronunciation processing timed out.", "pronunciation", timeout_seconds=exc.timeout)
+        return _component_failure("STAGE_TIMEOUT", "Local Kaldi/GOPT pronunciation processing exceeded its 300-second deadline; child processes were terminated.", "pronunciation", timeout_seconds=exc.timeout)
     except (OSError, json.JSONDecodeError) as exc:
         return _component_failure("PRONUNCIATION_FAILED", str(exc), "pronunciation")
     except Exception as exc:
@@ -1062,10 +1070,10 @@ def assess(
     fluency: dict[str, Any]
     try:
         import subprocess
-        process = subprocess.run(
+        process = run_bounded(
             ["ffmpeg", "-nostdin", "-hide_banner", "-nostats", "-i", str(audio),
              "-af", "silencedetect=noise=-35dB:d=0.25", "-f", "null", "-"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, timeout=min(300, max(30, int(duration * 4))),
         )
         silence_intervals = parse_silence_intervals(process.stderr, duration)
         energy = _signal_energy(samples)
