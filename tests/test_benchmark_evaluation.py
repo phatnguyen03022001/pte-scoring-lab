@@ -73,6 +73,17 @@ class BenchmarkEvaluationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "development"):
             evaluation.validate_evaluation(data)
 
+    def test_unbounded_native_regression_scores_are_explicit_and_not_clipped(self):
+        data = pronunciation_fixture()
+        data["rows"][0]["prediction"] = 2.04
+        with self.assertRaisesRegex(ValueError, "outside prediction_scale"):
+            evaluation.validate_evaluation(data)
+        data["prediction_scale_behavior"] = "unbounded_regression"
+        report = evaluation.evaluate(data)
+        self.assertEqual(report["prediction_scale"], [0.0, 1.0])
+        self.assertEqual(report["prediction_scale_behavior"], "unbounded_regression")
+        self.assertEqual(data["rows"][0]["prediction"], 2.04)
+
     def test_speaker_overlap_and_undeclared_speaker_are_rejected(self):
         data = pronunciation_fixture()
         data["speaker_partitions"]["train"].append("s1")

@@ -66,6 +66,9 @@ def validate_evaluation(data: dict[str, Any]) -> dict[str, Any]:
         score_low, score_high = (_finite_number(v, "prediction_scale") for v in score_scale)
         if score_low >= score_high or not score_low <= threshold <= score_high:
             raise ValueError("prediction_scale must be increasing and contain the threshold.")
+        scale_behavior = data.get("prediction_scale_behavior", "bounded")
+        if scale_behavior not in ("bounded", "unbounded_regression"):
+            raise ValueError("prediction_scale_behavior must be 'bounded' or 'unbounded_regression'.")
         if data.get("threshold_source_partition") != "development":
             raise ValueError("Pronunciation threshold must be selected on the development partition.")
         if not isinstance(data.get("higher_score_is_positive"), bool):
@@ -133,7 +136,7 @@ def validate_evaluation(data: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError(f"rows[{index}].reference is not a declared binary label.")
             if prediction is not None:
                 row["prediction"] = _finite_number(prediction, f"rows[{index}].prediction")
-                if not score_low <= row["prediction"] <= score_high:
+                if scale_behavior == "bounded" and not score_low <= row["prediction"] <= score_high:
                     raise ValueError(f"rows[{index}].prediction is outside prediction_scale.")
         else:
             low, high = label["scale"]
@@ -359,6 +362,7 @@ def evaluate(data: dict[str, Any]) -> dict[str, Any]:
         "task": data["task"], "unit": data["unit"], "dataset": data["dataset"],
         "partition": data["partition"], "label": data["label"],
         "prediction_scale": data.get("prediction_scale"),
+        "prediction_scale_behavior": data.get("prediction_scale_behavior", "bounded"),
         "threshold_source_partition": data.get("threshold_source_partition"),
         "higher_score_is_positive": data.get("higher_score_is_positive"),
         "operational": data.get("operational", {}),
