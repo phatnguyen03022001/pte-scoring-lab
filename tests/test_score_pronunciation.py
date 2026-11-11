@@ -27,8 +27,15 @@ class ReferenceAndPhoneTests(unittest.TestCase):
         self.assertEqual(scoring.normalize_reference("  Maple, grows QUIETLY-near the stream! "),
                          ["MAPLE", "GROWS", "QUIETLY", "NEAR", "THE", "STREAM"])
 
+    def test_leading_elision_apostrophe_does_not_invalidate_reference(self):
+        self.assertEqual(
+            scoring.normalize_reference("Give 'em what they don't have."),
+            ["GIVE", "EM", "WHAT", "THEY", "DON'T", "HAVE"],
+        )
+        self.assertEqual(scoring.normalize_reference("Give ’em."), ["GIVE", "EM"])
+
     def test_transcript_empty_digits_and_unsupported_characters_fail_closed(self):
-        for reference in ("...", "yellow 12", "hello @world"):
+        for reference in ("...", "yellow 12", "hello @world", "don''t", "''em"):
             with self.subTest(reference=reference), self.assertRaises(scoring.ScoreError):
                 scoring.normalize_reference(reference)
 

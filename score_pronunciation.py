@@ -71,6 +71,9 @@ class ScoreError(Exception):
 def normalize_reference(reference: str) -> list[str]:
     text = reference.replace("’", "'").replace("‘", "'").replace("`", "'")
     text = text.upper()
+    # A single leading apostrophe can mark a spoken elision (e.g. 'em).
+    # Keep internal contractions intact and reject doubled/malformed apostrophes.
+    text = re.sub(r"(?<![A-Z'])'(?=[A-Z])", "", text)
     words = re.findall(r"[A-Z]+(?:'[A-Z]+)*|[0-9]+", text)
     if not words:
         raise ScoreError("INVALID_REFERENCE", "reference", "Reference must contain English words.")
