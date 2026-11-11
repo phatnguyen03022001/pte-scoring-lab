@@ -20,6 +20,8 @@ SpeechOcean762 is **not an independent final evaluation set** for this project: 
 
 The existing QUALITY-08 and QUALITY-09 EpaDB manifests and source files were verified locally against their recorded hashes. Their historical benchmark results were not rerun or overwritten. A speaker-count inconsistency in the QUALITY-09 local manifest wording was found; the actual record set is the authoritative count, and the details remain in the ignored local research area. No EpaDB recordings, labels, manifests, or derived benchmark results are included in this public repository report. EpaDB remains under [CC BY-NC 4.0](https://github.com/donggangj/EpaDB), so its samples and results remain restricted to the permitted non-commercial research use.
 
+**Further EpaDB acquisition decision:** no additional recordings were acquired. The existing speaker-separated samples meet this task's local phonetic-validation need; new L1 and spontaneous-speaking coverage offers more value once the gated sources are authorized.
+
 ## Restricted acquisition decisions
 
 ### L2-ARCTIC
