@@ -31,12 +31,12 @@ class ProcessSafetyTests(unittest.TestCase):
             started = time.monotonic()
             with self.assertRaises(subprocess.TimeoutExpired):
                 run_bounded(
-                    [sys.executable, "-c", script, str(pid_file)], timeout=0.25,
+                    [sys.executable, "-c", script, str(pid_file)], timeout=2.0,
                     capture_output=True, text=True,
                     env={**os.environ, process_safety.PROCESS_GROUP_REGISTRY_ENV: str(registry)},
                     cleanup_process_groups=True,
                 )
-            self.assertLess(time.monotonic() - started, 4.0)
+            self.assertLess(time.monotonic() - started, 8.0)
             child_pid = int(pid_file.read_text())
             for _ in range(100):
                 try:

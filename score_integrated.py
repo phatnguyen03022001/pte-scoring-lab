@@ -8,6 +8,7 @@ import json
 import math
 import os
 import re
+import signal
 import sys
 import subprocess
 import shutil
@@ -18,16 +19,19 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
-import score_pronunciation
 from process_safety import DEADLINE_ENV, PROCESS_GROUP_REGISTRY_ENV, run_bounded
-from faster_whisper import WhisperModel
-from faster_whisper.audio import decode_audio
-from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+if not (__name__ == "__main__" and "--_worker" not in sys.argv):
+    import numpy as np
+
+    import score_pronunciation
+    from faster_whisper import WhisperModel
+    from faster_whisper.audio import decode_audio
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
 
 
 SAMPLE_RATE = 16_000
+INTEGRATED_TIMEOUT_SECONDS = 420
 MAX_CONTENT_ALIGNMENT_CELLS = 1_000_000
 TOKEN_PATTERN = re.compile(r"\d+(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|[^\W\d_]+(?:['’‘`][^\W\d_]+)*", re.UNICODE)
 SILENCE_START = re.compile(r"silence_start:\s*([0-9.]+)")
@@ -1125,6 +1129,7 @@ def main() -> int:
         "--legacy-whole-window-policy", action="store_true",
         help="Use the frozen QUALITY-07 whole-window rejection policy for baseline comparisons.",
     )
+    parser.add_argument("--_worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if not 1 <= args.threads <= 8:
         failure = _component_failure("INVALID_THREADS", "--threads must be between 1 and 8.", "cli_arguments")
@@ -1142,11 +1147,66 @@ def main() -> int:
             },
         }, indent=2))
         return 2
-    result = assess(
-        args.audio, args.reference, args.model, args.threads, args.task,
-        recover_supported_words=not args.legacy_whole_window_policy,
-    )
-    print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+
+    if not args._worker:
+        environment = os.environ.copy()
+        environment[DEADLINE_ENV] = str(time.monotonic() + INTEGRATED_TIMEOUT_SECONDS)
+        try:
+            process = run_bounded(
+                [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:], "--_worker"],
+                capture_output=True, text=True, timeout=INTEGRATED_TIMEOUT_SECONDS,
+                env=environment, cleanup_process_groups=True,
+            )
+        except subprocess.TimeoutExpired as exc:
+            failure = _component_failure(
+                "STAGE_TIMEOUT", "Integrated scoring exceeded its 420-second deadline; child processes were terminated.",
+                "integrated_scoring", timeout_seconds=exc.timeout,
+            )
+            print(json.dumps({
+                "schema_version": "quality-07-integrated-v1",
+                "task": "READ_ALOUD" if args.task == "ra" else "REPEAT_SENTENCE",
+                "status": "FAILED", "error": failure["error"],
+                "components": {name: failure for name in ("content", "pronunciation", "oral_fluency", "prosody", "word_stress")},
+                "overall_pte_score": None, "pearson_pte_score": None,
+                "long_form": {
+                    "reference_phone_count": None, "processed_phone_count": 0,
+                    "supported_phone_count": 0, "chunk_count": 0,
+                    "coverage": 0.0, "aggregation_status": "NOT_RUN",
+                },
+            }, ensure_ascii=False, indent=2))
+            return 2
+        sys.stdout.write(process.stdout)
+        sys.stderr.write(process.stderr)
+        return process.returncode
+
+    signal_handler = None
+    previous_sigterm = None
+    try:
+        if args._worker and hasattr(signal, "SIGTERM"):
+            previous_sigterm = signal.getsignal(signal.SIGTERM)
+            def cancel_on_sigterm(signum: int, frame: Any) -> None:
+                raise KeyboardInterrupt("integrated scoring was cancelled")
+            signal_handler = signal.signal(signal.SIGTERM, cancel_on_sigterm)
+        result = assess(
+            args.audio, args.reference, args.model, args.threads, args.task,
+            recover_supported_words=not args.legacy_whole_window_policy,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+    except KeyboardInterrupt:
+        failure = _component_failure("STAGE_TIMEOUT", "Integrated scoring was cancelled; child processes were terminated.", "integrated_scoring")
+        print(json.dumps({
+            "schema_version": "quality-07-integrated-v1",
+            "task": "READ_ALOUD" if args.task == "ra" else "REPEAT_SENTENCE",
+            "status": "FAILED", "error": failure["error"],
+            "components": {name: failure for name in ("content", "pronunciation", "oral_fluency", "prosody", "word_stress")},
+            "overall_pte_score": None, "pearson_pte_score": None,
+            "long_form": {"reference_phone_count": None, "processed_phone_count": 0, "supported_phone_count": 0,
+                          "chunk_count": 0, "coverage": 0.0, "aggregation_status": "NOT_RUN"},
+        }, ensure_ascii=False, indent=2))
+        return 2
+    finally:
+        if signal_handler is not None:
+            signal.signal(signal.SIGTERM, previous_sigterm)
     if result["status"] == "FAILED":
         return 2
     return 0
